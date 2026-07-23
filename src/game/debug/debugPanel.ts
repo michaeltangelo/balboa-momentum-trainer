@@ -16,15 +16,21 @@ const controls: Array<{
   max: number;
   step: number;
 }> = [
-  { key: 'thrust', label: 'Thrust', min: 100, max: 1600, step: 10 },
+  { key: 'thrust', label: 'Thrust', min: 100, max: 3000, step: 10 },
   { key: 'rocketMass', label: 'Rocket mass', min: 0.5, max: 5, step: 0.1 },
+  { key: 'rocketRadius', label: 'Rocket radius', min: 10, max: 60, step: 1 },
   { key: 'partnerMass', label: 'Partner mass', min: 1, max: 12, step: 0.1 },
+  { key: 'partnerRadius', label: 'Partner radius', min: 12, max: 60, step: 1 },
   { key: 'restLength', label: 'Rest length', min: 80, max: 320, step: 1 },
   { key: 'slack', label: 'Slack', min: 0, max: 80, step: 1 },
   { key: 'springStiffness', label: 'Stiffness', min: 0.5, max: 14, step: 0.1 },
   { key: 'springDamping', label: 'Damping', min: 0, max: 8, step: 0.1 },
   { key: 'generalDrag', label: 'General drag', min: 0, max: 2, step: 0.01 },
-  { key: 'maxInputRadius', label: 'Input radius', min: 30, max: 150, step: 1 },
+  { key: 'targetStopRadius', label: 'Target stop radius', min: 0, max: 40, step: 1 },
+  { key: 'targetSlowRadius', label: 'Target slow radius', min: 20, max: 240, step: 1 },
+  { key: 'targetMaxSpeed', label: 'Target max speed', min: 40, max: 800, step: 5 },
+  { key: 'targetVelocityResponse', label: 'Target response', min: 10, max: 300, step: 5 },
+  { key: 'healthyExtension', label: 'Healthy extension', min: 10, max: 160, step: 1 },
 ];
 
 export function createDebugPanel(tuning: Tuning): (stats: DebugStats) => void {

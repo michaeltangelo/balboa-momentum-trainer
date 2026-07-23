@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { WORLD_HEIGHT, WORLD_WIDTH, tuning } from '../config/tuning';
 import type { DebugStats } from '../debug/debugPanel';
-import { calculateDrag } from '../input/dragInput';
+import { calculateTargetThrust } from '../input/targetInput';
 import {
   applyConnectionForces,
   calculateConnection,
@@ -11,7 +11,6 @@ import { addForce, circlesCollide, containBody, integrate, speed } from '../phys
 import { createBody, type Body, type Vec2 } from '../physics/types';
 
 const STEP = 1 / 60;
-const DEAD_ZONE = 10;
 const ARENA_MARGIN = 16;
 
 export class GameScene extends Phaser.Scene {
@@ -23,7 +22,6 @@ export class GameScene extends Phaser.Scene {
   private cursorKeys!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Record<'W' | 'A' | 'S' | 'D' | 'R', Phaser.Input.Keyboard.Key>;
   private pointerActive = false;
-  private pointerOrigin: Vec2 = { x: 0, y: 0 };
   private pointerCurrent: Vec2 = { x: 0, y: 0 };
   private accumulator = 0;
   private collided = false;
@@ -94,8 +92,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private restart = (): void => {
-    this.rocket = createBody(WORLD_WIDTH / 2, 525, tuning.rocketMass, 15);
-    this.partner = createBody(WORLD_WIDTH / 2, 295, tuning.partnerMass, 36);
+    this.rocket = createBody(WORLD_WIDTH / 2, 454.75, tuning.rocketMass, tuning.rocketRadius);
+    this.partner = createBody(WORLD_WIDTH / 2, 370.25, tuning.partnerMass, tuning.partnerRadius);
     this.collided = false;
     this.pointerActive = false;
     this.accumulator = 0;
@@ -146,13 +144,12 @@ export class GameScene extends Phaser.Scene {
     const keyboardLength = Math.hypot(x, y);
     if (keyboardLength > 0) return { x: x / keyboardLength, y: y / keyboardLength };
     if (!this.pointerActive) return { x: 0, y: 0 };
-    const drag = calculateDrag(
-      this.pointerOrigin,
-      this.pointerCurrent,
-      DEAD_ZONE,
-      tuning.maxInputRadius,
-    );
-    return { x: drag.direction.x * drag.magnitude, y: drag.direction.y * drag.magnitude };
+    return calculateTargetThrust(this.rocket.position, this.rocket.velocity, this.pointerCurrent, {
+      stopRadius: tuning.targetStopRadius,
+      slowRadius: tuning.targetSlowRadius,
+      maxSpeed: tuning.targetMaxSpeed,
+      velocityResponse: tuning.targetVelocityResponse,
+    });
   }
 
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
@@ -161,8 +158,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.pointerActive = true;
-    this.pointerOrigin = { x: pointer.worldX, y: pointer.worldY };
-    this.pointerCurrent = { ...this.pointerOrigin };
+    this.pointerCurrent = { x: pointer.worldX, y: pointer.worldY };
   }
 
   private onPointerMove(pointer: Phaser.Input.Pointer): void {
@@ -210,12 +206,13 @@ export class GameScene extends Phaser.Scene {
   private drawBand(g: Phaser.GameObjects.Graphics): void {
     const a = this.rocket.position;
     const b = this.partner.position;
+    const visualScale = (this.rocket.radius / 17 + this.partner.radius / 16) / 2;
     const tensionRatio = Math.min(
       1,
       this.lastConnection.extension / Math.max(1, tuning.healthyExtension),
     );
     if (this.lastConnection.extension === 0) {
-      g.lineStyle(2, 0x9eb2d4, 0.4);
+      g.lineStyle(2 * visualScale, 0x9eb2d4, 0.4);
       const segments = 12;
       for (let i = 0; i < segments; i += 2) {
         const from = i / segments;
@@ -228,21 +225,23 @@ export class GameScene extends Phaser.Scene {
         );
       }
     } else {
-      g.lineStyle(2 + tensionRatio * 3, 0xaed2ff, 0.58 + tensionRatio * 0.38);
+      g.lineStyle((2 + tensionRatio * 3) * visualScale, 0xaed2ff, 0.58 + tensionRatio * 0.38);
       g.lineBetween(a.x, a.y, b.x, b.y);
     }
   }
 
   private drawPartner(g: Phaser.GameObjects.Graphics): void {
     const { x, y } = this.partner.position;
-    g.fillStyle(0x172a49, 1).fillCircle(x, y, this.partner.radius + 3);
+    const visualScale = this.partner.radius / 16;
+    g.fillStyle(0x172a49, 1).fillCircle(x, y, this.partner.radius + 3 * visualScale);
     g.fillStyle(0x6c91bd, 1).fillCircle(x, y, this.partner.radius);
-    g.fillStyle(0xbcd7ef, 0.35).fillCircle(x - 10, y - 11, 11);
-    g.lineStyle(2, 0xd6e8ff, 0.5).strokeCircle(x, y, this.partner.radius);
+    g.fillStyle(0xbcd7ef, 0.22).fillCircle(x, y, this.partner.radius * 0.58);
+    g.lineStyle(2 * visualScale, 0xd6e8ff, 0.5).strokeCircle(x, y, this.partner.radius);
   }
 
   private drawRocket(g: Phaser.GameObjects.Graphics): void {
     const { x, y } = this.rocket.position;
+    const visualScale = this.rocket.radius / 15;
     const velocityAngle =
       speed(this.rocket) > 8
         ? Math.atan2(this.rocket.velocity.y, this.rocket.velocity.x)
@@ -250,39 +249,54 @@ export class GameScene extends Phaser.Scene {
     const thrust = this.getThrust();
     const angle =
       Math.hypot(thrust.x, thrust.y) > 0.05 ? Math.atan2(thrust.y, thrust.x) : velocityAngle;
-    const nose = { x: x + Math.cos(angle) * 18, y: y + Math.sin(angle) * 18 };
-    const left = { x: x + Math.cos(angle + 2.45) * 14, y: y + Math.sin(angle + 2.45) * 14 };
-    const right = { x: x + Math.cos(angle - 2.45) * 14, y: y + Math.sin(angle - 2.45) * 14 };
+    const nose = {
+      x: x + Math.cos(angle) * 18 * visualScale,
+      y: y + Math.sin(angle) * 18 * visualScale,
+    };
+    const left = {
+      x: x + Math.cos(angle + 2.45) * 14 * visualScale,
+      y: y + Math.sin(angle + 2.45) * 14 * visualScale,
+    };
+    const right = {
+      x: x + Math.cos(angle - 2.45) * 14 * visualScale,
+      y: y + Math.sin(angle - 2.45) * 14 * visualScale,
+    };
     if (Math.hypot(thrust.x, thrust.y) > 0.05 && !this.collided) {
-      g.lineStyle(4, 0xf1b36a, 0.72).lineBetween(
-        x - Math.cos(angle) * 12,
-        y - Math.sin(angle) * 12,
-        x - Math.cos(angle) * 25,
-        y - Math.sin(angle) * 25,
+      g.lineStyle(4 * visualScale, 0xf1b36a, 0.72).lineBetween(
+        x - Math.cos(angle) * 12 * visualScale,
+        y - Math.sin(angle) * 12 * visualScale,
+        x - Math.cos(angle) * 25 * visualScale,
+        y - Math.sin(angle) * 25 * visualScale,
       );
     }
     g.fillStyle(0xeef5ff, 1).fillTriangle(nose.x, nose.y, left.x, left.y, right.x, right.y);
-    g.lineStyle(2, 0x6ea9e8, 1).strokeTriangle(nose.x, nose.y, left.x, left.y, right.x, right.y);
+    g.lineStyle(2 * visualScale, 0x6ea9e8, 1).strokeTriangle(
+      nose.x,
+      nose.y,
+      left.x,
+      left.y,
+      right.x,
+      right.y,
+    );
   }
 
   private drawInput(g: Phaser.GameObjects.Graphics): void {
-    const drag = calculateDrag(
-      this.pointerOrigin,
-      this.pointerCurrent,
-      DEAD_ZONE,
-      tuning.maxInputRadius,
+    const visualScale = this.rocket.radius / 17;
+    g.lineStyle(2 * visualScale, 0xd5e6ff, 0.22).lineBetween(
+      this.rocket.position.x,
+      this.rocket.position.y,
+      this.pointerCurrent.x,
+      this.pointerCurrent.y,
     );
-    g.lineStyle(2, 0xd5e6ff, 0.28).strokeCircle(this.pointerOrigin.x, this.pointerOrigin.y, 17);
-    if (drag.magnitude > 0) {
-      const endX = this.pointerOrigin.x + drag.cappedOffset.x;
-      const endY = this.pointerOrigin.y + drag.cappedOffset.y;
-      g.lineStyle(3, 0xd5e6ff, 0.55).lineBetween(
-        this.pointerOrigin.x,
-        this.pointerOrigin.y,
-        endX,
-        endY,
-      );
-      g.fillStyle(0xd5e6ff, 0.65).fillCircle(endX, endY, 5);
-    }
+    g.lineStyle(2 * visualScale, 0xd5e6ff, 0.55).strokeCircle(
+      this.pointerCurrent.x,
+      this.pointerCurrent.y,
+      tuning.targetStopRadius,
+    );
+    g.fillStyle(0xd5e6ff, 0.72).fillCircle(
+      this.pointerCurrent.x,
+      this.pointerCurrent.y,
+      4 * visualScale,
+    );
   }
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { tuning } from '../src/game/config/tuning';
 import { applyConnectionForces, calculateConnection } from '../src/game/physics/connection';
 import { circlesCollide } from '../src/game/physics/simulation';
 import { createBody } from '../src/game/physics/types';
@@ -44,6 +45,49 @@ describe('elastic connection', () => {
     applyConnectionForces(a, b, calculateConnection(a, b, settings));
     expect(a.force.x).toBeCloseTo(-b.force.x);
     expect(a.force.y).toBeCloseTo(-b.force.y);
+  });
+});
+
+describe('default tether tuning', () => {
+  it('starts tension at 75.4 px and overstretch at 153.4 px', () => {
+    expect(tuning.restLength + tuning.slack).toBeCloseTo(75.4);
+    expect(tuning.restLength + tuning.slack + tuning.healthyExtension).toBeCloseTo(153.4);
+  });
+
+  it('uses the short, tight partner and spring profile', () => {
+    expect(tuning.rocketRadius).toBe(22.1);
+    expect(tuning.partnerRadius).toBe(20.8);
+    expect(tuning.rocketMass).toBe(1.2);
+    expect(tuning.partnerMass).toBe(1);
+    expect(tuning.springStiffness).toBe(1.8);
+    expect(tuning.springDamping).toBe(2.4);
+    expect(tuning.overstretchFactor).toBeCloseTo(0.029585798816568046);
+    expect(tuning.targetMaxSpeed).toBe(325);
+  });
+
+  it('preserves touch acceleration with a player that is 20% heavier than the partner', () => {
+    expect(tuning.thrust / tuning.rocketMass).toBeCloseTo(988);
+    expect(tuning.rocketMass / tuning.partnerMass).toBe(1.2);
+    expect(1 / tuning.partnerMass).toBeGreaterThan(1 / tuning.rocketMass);
+  });
+
+  it('stays elastic through its short range and ramps sharply after it', () => {
+    const a = createBody(0, 0, 1, 1);
+    const connectionSettings = {
+      restLength: tuning.restLength,
+      slack: tuning.slack,
+      stiffness: tuning.springStiffness,
+      damping: tuning.springDamping,
+      healthyExtension: tuning.healthyExtension,
+      overstretchFactor: tuning.overstretchFactor,
+    };
+    const early = calculateConnection(a, createBody(104, 0, 1, 1), connectionSettings);
+    const elasticEnd = calculateConnection(a, createBody(153.4, 0, 1, 1), connectionSettings);
+    const overstretched = calculateConnection(a, createBody(166.4, 0, 1, 1), connectionSettings);
+
+    expect(early.tension).toBeCloseTo(51.48);
+    expect(elasticEnd.tension).toBeCloseTo(140.4);
+    expect(overstretched.tension).toBeCloseTo(982.8);
   });
 });
 
