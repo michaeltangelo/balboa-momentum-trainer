@@ -5,6 +5,9 @@ export interface Tuning {
   torsoWidth: number;
   torsoDepth: number;
   leaderTurnSpeed: number;
+  leaderTravelFacingWeight: number;
+  leaderTravelBlendStartSpeed: number;
+  leaderTravelBlendFullSpeed: number;
   restLength: number;
   slack: number;
   springStiffness: number;
@@ -25,6 +28,9 @@ export const tuning: Tuning = {
   torsoWidth: 50,
   torsoDepth: 16,
   leaderTurnSpeed: 4,
+  leaderTravelFacingWeight: 0.3,
+  leaderTravelBlendStartSpeed: 20,
+  leaderTravelBlendFullSpeed: 160,
   restLength: 67.6,
   slack: 7.8,
   springStiffness: 1.8,

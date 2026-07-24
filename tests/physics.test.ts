@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { tuning } from '../src/game/config/tuning';
 import { applyConnectionForces, calculateConnection } from '../src/game/physics/connection';
 import { capsulesCollide, createTorsoCapsule } from '../src/game/physics/capsule';
-import { rotateTowards, shortestAngleDelta } from '../src/game/physics/orientation';
+import {
+  calculateBlendedLeaderFacing,
+  rotateTowards,
+  shortestAngleDelta,
+} from '../src/game/physics/orientation';
 import { createBody } from '../src/game/physics/types';
 
 const settings = {
@@ -59,6 +63,9 @@ describe('default tether tuning', () => {
     expect(tuning.torsoWidth).toBe(50);
     expect(tuning.torsoDepth).toBe(16);
     expect(tuning.leaderTurnSpeed).toBe(4);
+    expect(tuning.leaderTravelFacingWeight).toBe(0.3);
+    expect(tuning.leaderTravelBlendStartSpeed).toBe(20);
+    expect(tuning.leaderTravelBlendFullSpeed).toBe(160);
     expect(tuning.rocketMass).toBe(1.2);
     expect(tuning.partnerMass).toBe(1);
     expect(tuning.springStiffness).toBe(1.8);
@@ -120,6 +127,33 @@ describe('torso capsule collision', () => {
 });
 
 describe('torso orientation', () => {
+  const blendedFacing = (velocity: { x: number; y: number }) =>
+    calculateBlendedLeaderFacing(
+      { x: 0, y: 0 },
+      velocity,
+      { x: 100, y: 0 },
+      {
+        travelWeight: 0.6,
+        travelBlendStartSpeed: 20,
+        travelBlendFullSpeed: 160,
+      },
+    );
+
+  it('faces the follow while the leader is nearly stationary', () => {
+    expect(blendedFacing({ x: 0, y: 10 })).toBeCloseTo(0);
+  });
+
+  it('blends toward the travel axis as speed increases', () => {
+    const partialBlend = blendedFacing({ x: 0, y: 90 });
+    const fullBlend = blendedFacing({ x: 0, y: 160 });
+    expect(partialBlend).toBeCloseTo(Math.PI * 0.15);
+    expect(fullBlend).toBeCloseTo(Math.PI * 0.3);
+  });
+
+  it('chooses the end of the travel axis nearest the follow', () => {
+    expect(blendedFacing({ x: -160, y: 0 })).toBeCloseTo(0);
+  });
+
   it('turns the leader toward the follow at a bounded rate', () => {
     expect(rotateTowards(0, Math.PI / 2, 0.25)).toBeCloseTo(0.25);
   });

@@ -8,7 +8,7 @@ import {
   type ConnectionResult,
 } from '../physics/connection';
 import { capsulesCollide, createTorsoCapsule } from '../physics/capsule';
-import { rotateTowards } from '../physics/orientation';
+import { calculateBlendedLeaderFacing, rotateTowards } from '../physics/orientation';
 import { addForce, containBody, integrate, speed } from '../physics/simulation';
 import { createBody, type Body, type Vec2 } from '../physics/types';
 
@@ -160,9 +160,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateOrientations(dt: number): void {
-    const leaderTarget = Math.atan2(
-      this.partner.position.y - this.rocket.position.y,
-      this.partner.position.x - this.rocket.position.x,
+    const leaderTarget = calculateBlendedLeaderFacing(
+      this.rocket.position,
+      this.rocket.velocity,
+      this.partner.position,
+      {
+        travelWeight: tuning.leaderTravelFacingWeight,
+        travelBlendStartSpeed: tuning.leaderTravelBlendStartSpeed,
+        travelBlendFullSpeed: tuning.leaderTravelBlendFullSpeed,
+      },
     );
     this.leaderFacing = rotateTowards(this.leaderFacing, leaderTarget, tuning.leaderTurnSpeed * dt);
     this.partnerFacing = Math.atan2(
