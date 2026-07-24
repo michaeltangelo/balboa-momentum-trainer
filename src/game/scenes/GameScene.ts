@@ -11,6 +11,7 @@ import { capsulesCollide, createTorsoCapsule } from '../physics/capsule';
 import { calculateBlendedLeaderFacing, rotateTowards } from '../physics/orientation';
 import { addForce, containBody, integrate, speed } from '../physics/simulation';
 import { createBody, type Body, type Vec2 } from '../physics/types';
+import { BeatClock } from '../rhythm/beatClock';
 
 const STEP = 1 / 60;
 const ARENA_MARGIN = 16;
@@ -19,7 +20,8 @@ export class GameScene extends Phaser.Scene {
   private rocket!: Body;
   private partner!: Body;
   private graphics!: Phaser.GameObjects.Graphics;
-  private titleText!: Phaser.GameObjects.Text;
+  private beatTexts: Phaser.GameObjects.Text[] = [];
+  private rhythmPhaseText!: Phaser.GameObjects.Text;
   private resultText!: Phaser.GameObjects.Text;
   private cursorKeys!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Record<'W' | 'A' | 'S' | 'D' | 'R', Phaser.Input.Keyboard.Key>;
@@ -31,6 +33,7 @@ export class GameScene extends Phaser.Scene {
   private partnerFacing = Math.PI / 2;
   private lastConnection!: ConnectionResult;
   private averagedFrameMs = 16.7;
+  private readonly beatClock = new BeatClock(tuning.rhythmBpm);
   private readonly reportStats?: (stats: DebugStats) => void;
 
   constructor(reportStats?: (stats: DebugStats) => void) {
@@ -40,10 +43,19 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.graphics = this.add.graphics();
-    this.titleText = this.add
-      .text(WORLD_WIDTH / 2, 42, 'MOVE FIRST • MAKE A PATH • CLEAR IT', {
+    this.beatTexts = [1, 2, 3, 4].map((count, index) =>
+      this.add
+        .text(150 + index * 30, 50, String(count), {
+          fontFamily: 'system-ui, sans-serif',
+          fontSize: '14px',
+          color: '#7385a6',
+        })
+        .setOrigin(0.5),
+    );
+    this.rhythmPhaseText = this.add
+      .text(WORLD_WIDTH / 2, 92, 'OUT', {
         fontFamily: 'system-ui, sans-serif',
-        fontSize: '12px',
+        fontSize: '11px',
         color: '#a9bddc',
         letterSpacing: 1,
       })
@@ -75,7 +87,9 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, deltaMs: number): void {
     this.averagedFrameMs += (deltaMs - this.averagedFrameMs) * 0.08;
+    this.beatClock.setBpm(tuning.rhythmBpm);
     if (!this.collided) {
+      this.beatClock.advance(deltaMs / 1000);
       this.accumulator += Math.min(deltaMs / 1000, 0.1);
       let steps = 0;
       while (this.accumulator >= STEP && steps < 6) {
@@ -104,6 +118,7 @@ export class GameScene extends Phaser.Scene {
     this.collided = false;
     this.pointerActive = false;
     this.accumulator = 0;
+    this.beatClock.reset();
     this.resultText?.setText('');
     this.lastConnection = this.getConnection();
   };
@@ -228,7 +243,28 @@ export class GameScene extends Phaser.Scene {
     this.drawTorso(g, this.partner, this.partnerFacing, 0x6c91bd, 0xd6e8ff, 0xbcd7ef);
     this.drawTorso(g, this.rocket, this.leaderFacing, 0xeef5ff, 0x6ea9e8, 0xf1b36a);
     if (this.pointerActive && !this.collided) this.drawInput(g);
-    this.titleText.setAlpha(this.collided ? 0.35 : 1);
+    this.drawBeatClock(g);
+  }
+
+  private drawBeatClock(g: Phaser.GameObjects.Graphics): void {
+    const state = this.beatClock.getState();
+    const activeIndex = state.count - 1;
+    const pulse = 1 - state.beatProgress;
+    for (const [index, text] of this.beatTexts.entries()) {
+      const active = index === activeIndex;
+      text
+        .setColor(active ? '#f4f8ff' : '#7385a6')
+        .setScale(active ? 1 + pulse * 0.2 : 1)
+        .setAlpha(this.collided ? 0.35 : active ? 1 : 0.65);
+      g.fillStyle(active ? 0x6ea9e8 : 0x283a57, active ? 0.75 : 0.45).fillCircle(
+        text.x,
+        text.y + 16,
+        active ? 3.5 + pulse * 1.5 : 3,
+      );
+    }
+    this.rhythmPhaseText
+      .setText(state.count <= 2 ? 'OUT' : state.count === 3 ? 'IN' : 'IN • PIVOT')
+      .setAlpha(this.collided ? 0.35 : 0.9);
   }
 
   private drawStars(g: Phaser.GameObjects.Graphics): void {

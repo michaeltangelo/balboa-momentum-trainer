@@ -1,4 +1,5 @@
 export interface Tuning {
+  rhythmBpm: number;
   thrust: number;
   rocketMass: number;
   partnerMass: number;
@@ -22,6 +23,7 @@ export interface Tuning {
 }
 
 export const tuning: Tuning = {
+  rhythmBpm: 120,
   thrust: 1185.6,
   rocketMass: 1.2,
   partnerMass: 1,
