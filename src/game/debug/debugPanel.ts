@@ -17,10 +17,11 @@ const controls: Array<{
   step: number;
 }> = [
   { key: 'thrust', label: 'Thrust', min: 100, max: 3000, step: 10 },
-  { key: 'rocketMass', label: 'Rocket mass', min: 0.5, max: 5, step: 0.1 },
-  { key: 'rocketRadius', label: 'Rocket radius', min: 10, max: 60, step: 1 },
-  { key: 'partnerMass', label: 'Partner mass', min: 1, max: 12, step: 0.1 },
-  { key: 'partnerRadius', label: 'Partner radius', min: 12, max: 60, step: 1 },
+  { key: 'rocketMass', label: 'Leader mass', min: 0.5, max: 5, step: 0.1 },
+  { key: 'partnerMass', label: 'Follow mass', min: 1, max: 12, step: 0.1 },
+  { key: 'torsoWidth', label: 'Torso width', min: 24, max: 80, step: 1 },
+  { key: 'torsoDepth', label: 'Torso depth', min: 8, max: 30, step: 1 },
+  { key: 'leaderTurnSpeed', label: 'Leader turn speed', min: 0.5, max: 12, step: 0.1 },
   { key: 'restLength', label: 'Rest length', min: 80, max: 320, step: 1 },
   { key: 'slack', label: 'Slack', min: 0, max: 80, step: 1 },
   { key: 'springStiffness', label: 'Stiffness', min: 0.5, max: 14, step: 0.1 },
@@ -40,8 +41,8 @@ export function createDebugPanel(tuning: Tuning): (stats: DebugStats) => void {
 
   const statNames: Array<[keyof DebugStats, string]> = [
     ['frameMs', 'Frame'],
-    ['rocketSpeed', 'Rocket speed'],
-    ['partnerSpeed', 'Partner speed'],
+    ['rocketSpeed', 'Leader speed'],
+    ['partnerSpeed', 'Follow speed'],
     ['distance', 'Distance'],
     ['extension', 'Extension'],
     ['tension', 'Tension'],

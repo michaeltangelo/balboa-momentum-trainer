@@ -1,9 +1,10 @@
 export interface Tuning {
   thrust: number;
   rocketMass: number;
-  rocketRadius: number;
   partnerMass: number;
-  partnerRadius: number;
+  torsoWidth: number;
+  torsoDepth: number;
+  leaderTurnSpeed: number;
   restLength: number;
   slack: number;
   springStiffness: number;
@@ -20,9 +21,10 @@ export interface Tuning {
 export const tuning: Tuning = {
   thrust: 1185.6,
   rocketMass: 1.2,
-  rocketRadius: 22.1,
   partnerMass: 1,
-  partnerRadius: 20.8,
+  torsoWidth: 50,
+  torsoDepth: 16,
+  leaderTurnSpeed: 4,
   restLength: 67.6,
   slack: 7.8,
   springStiffness: 1.8,

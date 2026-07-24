@@ -7,7 +7,9 @@ import {
   calculateConnection,
   type ConnectionResult,
 } from '../physics/connection';
-import { addForce, circlesCollide, containBody, integrate, speed } from '../physics/simulation';
+import { capsulesCollide, createTorsoCapsule } from '../physics/capsule';
+import { rotateTowards } from '../physics/orientation';
+import { addForce, containBody, integrate, speed } from '../physics/simulation';
 import { createBody, type Body, type Vec2 } from '../physics/types';
 
 const STEP = 1 / 60;
@@ -25,6 +27,8 @@ export class GameScene extends Phaser.Scene {
   private pointerCurrent: Vec2 = { x: 0, y: 0 };
   private accumulator = 0;
   private collided = false;
+  private leaderFacing = -Math.PI / 2;
+  private partnerFacing = Math.PI / 2;
   private lastConnection!: ConnectionResult;
   private averagedFrameMs = 16.7;
   private readonly reportStats?: (stats: DebugStats) => void;
@@ -92,8 +96,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private restart = (): void => {
-    this.rocket = createBody(WORLD_WIDTH / 2, 454.75, tuning.rocketMass, tuning.rocketRadius);
-    this.partner = createBody(WORLD_WIDTH / 2, 370.25, tuning.partnerMass, tuning.partnerRadius);
+    const boundsRadius = Math.max(tuning.torsoWidth, tuning.torsoDepth) / 2;
+    this.rocket = createBody(WORLD_WIDTH / 2, 454.75, tuning.rocketMass, boundsRadius);
+    this.partner = createBody(WORLD_WIDTH / 2, 370.25, tuning.partnerMass, boundsRadius);
+    this.leaderFacing = -Math.PI / 2;
+    this.partnerFacing = Math.PI / 2;
     this.collided = false;
     this.pointerActive = false;
     this.accumulator = 0;
@@ -119,6 +126,8 @@ export class GameScene extends Phaser.Scene {
   private simulate(dt: number): void {
     this.rocket.mass = tuning.rocketMass;
     this.partner.mass = tuning.partnerMass;
+    this.rocket.radius = Math.max(tuning.torsoWidth, tuning.torsoDepth) / 2;
+    this.partner.radius = this.rocket.radius;
     const thrust = this.getThrust();
     addForce(this.rocket, { x: thrust.x * tuning.thrust, y: thrust.y * tuning.thrust });
     this.lastConnection = this.getConnection();
@@ -127,11 +136,39 @@ export class GameScene extends Phaser.Scene {
     integrate(this.partner, dt, tuning.generalDrag);
     containBody(this.rocket, WORLD_WIDTH, WORLD_HEIGHT, ARENA_MARGIN);
     containBody(this.partner, WORLD_WIDTH, WORLD_HEIGHT, ARENA_MARGIN);
-    if (circlesCollide(this.rocket, this.partner)) {
+    this.updateOrientations(dt);
+    if (
+      capsulesCollide(
+        createTorsoCapsule(
+          this.rocket.position,
+          this.leaderFacing,
+          tuning.torsoWidth,
+          tuning.torsoDepth,
+        ),
+        createTorsoCapsule(
+          this.partner.position,
+          this.partnerFacing,
+          tuning.torsoWidth,
+          tuning.torsoDepth,
+        ),
+      )
+    ) {
       this.collided = true;
       this.pointerActive = false;
       this.resultText.setText('PATH CROSSED\n\nTap anywhere to try again');
     }
+  }
+
+  private updateOrientations(dt: number): void {
+    const leaderTarget = Math.atan2(
+      this.partner.position.y - this.rocket.position.y,
+      this.partner.position.x - this.rocket.position.x,
+    );
+    this.leaderFacing = rotateTowards(this.leaderFacing, leaderTarget, tuning.leaderTurnSpeed * dt);
+    this.partnerFacing = Math.atan2(
+      this.rocket.position.y - this.partner.position.y,
+      this.rocket.position.x - this.partner.position.x,
+    );
   }
 
   private getThrust(): Vec2 {
@@ -182,8 +219,8 @@ export class GameScene extends Phaser.Scene {
     );
     this.drawStars(g);
     this.drawBand(g);
-    this.drawPartner(g);
-    this.drawRocket(g);
+    this.drawTorso(g, this.partner, this.partnerFacing, 0x6c91bd, 0xd6e8ff, 0xbcd7ef);
+    this.drawTorso(g, this.rocket, this.leaderFacing, 0xeef5ff, 0x6ea9e8, 0xf1b36a);
     if (this.pointerActive && !this.collided) this.drawInput(g);
     this.titleText.setAlpha(this.collided ? 0.35 : 1);
   }
@@ -206,7 +243,7 @@ export class GameScene extends Phaser.Scene {
   private drawBand(g: Phaser.GameObjects.Graphics): void {
     const a = this.rocket.position;
     const b = this.partner.position;
-    const visualScale = (this.rocket.radius / 17 + this.partner.radius / 16) / 2;
+    const visualScale = tuning.torsoWidth / 50;
     const tensionRatio = Math.min(
       1,
       this.lastConnection.extension / Math.max(1, tuning.healthyExtension),
@@ -230,58 +267,58 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private drawPartner(g: Phaser.GameObjects.Graphics): void {
-    const { x, y } = this.partner.position;
-    const visualScale = this.partner.radius / 16;
-    g.fillStyle(0x172a49, 1).fillCircle(x, y, this.partner.radius + 3 * visualScale);
-    g.fillStyle(0x6c91bd, 1).fillCircle(x, y, this.partner.radius);
-    g.fillStyle(0xbcd7ef, 0.22).fillCircle(x, y, this.partner.radius * 0.58);
-    g.lineStyle(2 * visualScale, 0xd6e8ff, 0.5).strokeCircle(x, y, this.partner.radius);
-  }
+  private drawTorso(
+    g: Phaser.GameObjects.Graphics,
+    body: Body,
+    facingAngle: number,
+    fillColor: number,
+    outlineColor: number,
+    frontColor: number,
+  ): void {
+    const capsule = createTorsoCapsule(
+      body.position,
+      facingAngle,
+      tuning.torsoWidth,
+      tuning.torsoDepth,
+    );
+    const axis = { x: Math.cos(capsule.axisAngle), y: Math.sin(capsule.axisAngle) };
+    const facing = { x: Math.cos(facingAngle), y: Math.sin(facingAngle) };
+    const start = {
+      x: body.position.x - axis.x * capsule.halfSegment,
+      y: body.position.y - axis.y * capsule.halfSegment,
+    };
+    const end = {
+      x: body.position.x + axis.x * capsule.halfSegment,
+      y: body.position.y + axis.y * capsule.halfSegment,
+    };
+    const visualScale = tuning.torsoWidth / 50;
+    const outlineRadius = capsule.radius + 2 * visualScale;
 
-  private drawRocket(g: Phaser.GameObjects.Graphics): void {
-    const { x, y } = this.rocket.position;
-    const visualScale = this.rocket.radius / 15;
-    const velocityAngle =
-      speed(this.rocket) > 8
-        ? Math.atan2(this.rocket.velocity.y, this.rocket.velocity.x)
-        : -Math.PI / 2;
-    const thrust = this.getThrust();
-    const angle =
-      Math.hypot(thrust.x, thrust.y) > 0.05 ? Math.atan2(thrust.y, thrust.x) : velocityAngle;
-    const nose = {
-      x: x + Math.cos(angle) * 18 * visualScale,
-      y: y + Math.sin(angle) * 18 * visualScale,
+    g.lineStyle(outlineRadius * 2, outlineColor, 0.72).lineBetween(start.x, start.y, end.x, end.y);
+    g.fillStyle(outlineColor, 0.72)
+      .fillCircle(start.x, start.y, outlineRadius)
+      .fillCircle(end.x, end.y, outlineRadius);
+    g.lineStyle(capsule.radius * 2, fillColor, 1).lineBetween(start.x, start.y, end.x, end.y);
+    g.fillStyle(fillColor, 1)
+      .fillCircle(start.x, start.y, capsule.radius)
+      .fillCircle(end.x, end.y, capsule.radius);
+
+    const frontOffset = capsule.radius * 0.58;
+    const markerHalfLength = capsule.halfSegment * 0.62;
+    const markerCenter = {
+      x: body.position.x + facing.x * frontOffset,
+      y: body.position.y + facing.y * frontOffset,
     };
-    const left = {
-      x: x + Math.cos(angle + 2.45) * 14 * visualScale,
-      y: y + Math.sin(angle + 2.45) * 14 * visualScale,
-    };
-    const right = {
-      x: x + Math.cos(angle - 2.45) * 14 * visualScale,
-      y: y + Math.sin(angle - 2.45) * 14 * visualScale,
-    };
-    if (Math.hypot(thrust.x, thrust.y) > 0.05 && !this.collided) {
-      g.lineStyle(4 * visualScale, 0xf1b36a, 0.72).lineBetween(
-        x - Math.cos(angle) * 12 * visualScale,
-        y - Math.sin(angle) * 12 * visualScale,
-        x - Math.cos(angle) * 25 * visualScale,
-        y - Math.sin(angle) * 25 * visualScale,
-      );
-    }
-    g.fillStyle(0xeef5ff, 1).fillTriangle(nose.x, nose.y, left.x, left.y, right.x, right.y);
-    g.lineStyle(2 * visualScale, 0x6ea9e8, 1).strokeTriangle(
-      nose.x,
-      nose.y,
-      left.x,
-      left.y,
-      right.x,
-      right.y,
+    g.lineStyle(2 * visualScale, frontColor, 0.9).lineBetween(
+      markerCenter.x - axis.x * markerHalfLength,
+      markerCenter.y - axis.y * markerHalfLength,
+      markerCenter.x + axis.x * markerHalfLength,
+      markerCenter.y + axis.y * markerHalfLength,
     );
   }
 
   private drawInput(g: Phaser.GameObjects.Graphics): void {
-    const visualScale = this.rocket.radius / 17;
+    const visualScale = tuning.torsoWidth / 50;
     g.lineStyle(2 * visualScale, 0xd5e6ff, 0.22).lineBetween(
       this.rocket.position.x,
       this.rocket.position.y,

@@ -26,16 +26,6 @@ export function containBody(body: Body, width: number, height: number, margin: n
   }
 }
 
-export function circlesCollide(
-  a: Pick<Body, 'position' | 'radius'>,
-  b: Pick<Body, 'position' | 'radius'>,
-): boolean {
-  const dx = a.position.x - b.position.x;
-  const dy = a.position.y - b.position.y;
-  const radii = a.radius + b.radius;
-  return dx * dx + dy * dy <= radii * radii;
-}
-
 export const speed = (body: Body): number => Math.hypot(body.velocity.x, body.velocity.y);
 
 export function addForce(body: Body, force: Vec2): void {

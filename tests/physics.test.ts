@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { tuning } from '../src/game/config/tuning';
 import { applyConnectionForces, calculateConnection } from '../src/game/physics/connection';
-import { circlesCollide } from '../src/game/physics/simulation';
+import { capsulesCollide, createTorsoCapsule } from '../src/game/physics/capsule';
+import { rotateTowards, shortestAngleDelta } from '../src/game/physics/orientation';
 import { createBody } from '../src/game/physics/types';
 
 const settings = {
@@ -55,8 +56,9 @@ describe('default tether tuning', () => {
   });
 
   it('uses the short, tight partner and spring profile', () => {
-    expect(tuning.rocketRadius).toBe(22.1);
-    expect(tuning.partnerRadius).toBe(20.8);
+    expect(tuning.torsoWidth).toBe(50);
+    expect(tuning.torsoDepth).toBe(16);
+    expect(tuning.leaderTurnSpeed).toBe(4);
     expect(tuning.rocketMass).toBe(1.2);
     expect(tuning.partnerMass).toBe(1);
     expect(tuning.springStiffness).toBe(1.8);
@@ -91,14 +93,41 @@ describe('default tether tuning', () => {
   });
 });
 
-describe('circle collision', () => {
+describe('torso capsule collision', () => {
+  const torso = (x: number, y: number, facing = -Math.PI / 2) =>
+    createTorsoCapsule({ x, y }, facing, 50, 16);
+
   it.each([
-    [20, true],
-    [19.9, true],
-    [20.1, false],
-  ])('handles distance %s', (distance, expected) => {
-    const a = createBody(0, 0, 1, 10);
-    const b = createBody(distance, 0, 1, 10);
-    expect(circlesCollide(a, b)).toBe(expected);
+    [16, true],
+    [15.9, true],
+    [16.1, false],
+  ])('handles front-to-front distance %s', (distance, expected) => {
+    expect(capsulesCollide(torso(0, 0), torso(0, distance, Math.PI / 2))).toBe(expected);
+  });
+
+  it('uses the narrow torso depth when partners pass one another', () => {
+    expect(capsulesCollide(torso(0, 0), torso(0, 30, Math.PI / 2))).toBe(false);
+  });
+
+  it('detects contact at the rounded shoulder ends', () => {
+    expect(capsulesCollide(torso(0, 0), torso(50, 0))).toBe(true);
+    expect(capsulesCollide(torso(0, 0), torso(50.1, 0))).toBe(false);
+  });
+
+  it('detects crossing torsos at different orientations', () => {
+    expect(capsulesCollide(torso(0, 0), torso(0, 0, 0))).toBe(true);
+  });
+});
+
+describe('torso orientation', () => {
+  it('turns the leader toward the follow at a bounded rate', () => {
+    expect(rotateTowards(0, Math.PI / 2, 0.25)).toBeCloseTo(0.25);
+  });
+
+  it('takes the shortest path across the angle boundary', () => {
+    const from = Math.PI - 0.1;
+    const target = -Math.PI + 0.1;
+    expect(shortestAngleDelta(from, target)).toBeCloseTo(0.2);
+    expect(rotateTowards(from, target, 0.05)).toBeCloseTo(from + 0.05);
   });
 });
