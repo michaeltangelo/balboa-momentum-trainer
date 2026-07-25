@@ -18,9 +18,32 @@ import { calculateBlendedLeaderFacing, rotateTowards } from '../physics/orientat
 import { addForce, containBody, integrate, speed } from '../physics/simulation';
 import { createBody, type Body, type Vec2 } from '../physics/types';
 import { BeatClock } from '../rhythm/beatClock';
+import {
+  PassDetector,
+  type PassDebugState,
+  type PassDetectorSettings,
+  type PassSample,
+} from '../scoring/passDetector';
 
 const STEP = 1 / 60;
 const ARENA_MARGIN = 16;
+const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
+const toDegrees = (radians: number): number => (radians * 180) / Math.PI;
+
+const getPassSettings = (): PassDetectorSettings => ({
+  entryDistance: tuning.passEntryDistance,
+  maximumClosestDistance: tuning.passMaximumClosestDistance,
+  minimumBearingChange: toRadians(tuning.passMinimumBearingDegrees),
+  minimumLeaderTurn: toRadians(tuning.passMinimumLeaderTurnDegrees),
+  minimumFollowTurn: toRadians(tuning.passMinimumFollowTurnDegrees),
+  minimumBodySpeed: tuning.passMinimumBodySpeed,
+  minimumClosingSpeed: tuning.passMinimumClosingSpeed,
+  minimumOutgoingSpeed: tuning.passMinimumOutgoingSpeed,
+  minimumOutgoingDuration: tuning.passMinimumOutgoingDuration,
+  minimumOutwardTravel: tuning.passMinimumOutwardTravel,
+  candidateTimeout: tuning.passCandidateTimeout,
+  rearmDistance: tuning.passRearmDistance,
+});
 
 export class GameScene extends Phaser.Scene {
   private rocket!: Body;
@@ -28,6 +51,8 @@ export class GameScene extends Phaser.Scene {
   private graphics!: Phaser.GameObjects.Graphics;
   private beatTexts: Phaser.GameObjects.Text[] = [];
   private rhythmPhaseText!: Phaser.GameObjects.Text;
+  private scoreText!: Phaser.GameObjects.Text;
+  private passDebugText!: Phaser.GameObjects.Text;
   private resultText!: Phaser.GameObjects.Text;
   private cursorKeys!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Record<'W' | 'A' | 'S' | 'D' | 'R', Phaser.Input.Keyboard.Key>;
@@ -41,6 +66,8 @@ export class GameScene extends Phaser.Scene {
   private lastConnection!: ConnectionResult;
   private averagedFrameMs = 16.7;
   private readonly beatClock = new BeatClock(tuning.rhythmBpm);
+  private readonly passDetector = new PassDetector(getPassSettings());
+  private passDebug: PassDebugState = this.passDetector.getState();
   private readonly reportStats?: (stats: DebugStats) => void;
 
   constructor(reportStats?: (stats: DebugStats) => void) {
@@ -67,6 +94,20 @@ export class GameScene extends Phaser.Scene {
         letterSpacing: 1,
       })
       .setOrigin(0.5);
+    this.scoreText = this.add
+      .text(WORLD_WIDTH - 24, 48, 'SCORE 0', {
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: '14px',
+        fontStyle: 'bold',
+        color: '#f4f8ff',
+      })
+      .setOrigin(1, 0.5);
+    this.passDebugText = this.add.text(24, 108, '', {
+      fontFamily: 'monospace',
+      fontSize: '10px',
+      color: '#91a8c9',
+      lineSpacing: 3,
+    });
     this.resultText = this.add
       .text(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, '', {
         align: 'center',
@@ -128,6 +169,9 @@ export class GameScene extends Phaser.Scene {
     this.pointerActive = false;
     this.accumulator = 0;
     this.beatClock.reset();
+    this.passDetector.setSettings(getPassSettings());
+    this.passDetector.reset();
+    this.passDebug = this.passDetector.getState();
     this.resultText?.setText('');
     this.lastConnection = this.getConnection();
   };
@@ -161,24 +205,39 @@ export class GameScene extends Phaser.Scene {
     containBody(this.rocket, WORLD_WIDTH, WORLD_HEIGHT, ARENA_MARGIN);
     containBody(this.partner, WORLD_WIDTH, WORLD_HEIGHT, ARENA_MARGIN);
     this.updateOrientations(dt);
-    if (
-      capsulesCollide(
-        createTorsoCapsule(
-          this.rocket.position,
-          this.leaderFacing,
-          tuning.torsoWidth,
-          tuning.torsoDepth,
-        ),
-        createTorsoCapsule(
-          this.partner.position,
-          this.partnerFacing,
-          tuning.torsoWidth,
-          tuning.torsoDepth,
-        ),
-      )
-    ) {
+    const collided = capsulesCollide(
+      createTorsoCapsule(
+        this.rocket.position,
+        this.leaderFacing,
+        tuning.torsoWidth,
+        tuning.torsoDepth,
+      ),
+      createTorsoCapsule(
+        this.partner.position,
+        this.partnerFacing,
+        tuning.torsoWidth,
+        tuning.torsoDepth,
+      ),
+    );
+    this.passDetector.setSettings(getPassSettings());
+    if (collided) {
       this.handleCollision();
+      this.passDetector.cancelCandidate('COLLISION');
+      this.passDebug = this.passDetector.update(this.getPassSample(), 0).debug;
+      return;
     }
+    this.passDebug = this.passDetector.update(this.getPassSample(), dt).debug;
+  }
+
+  private getPassSample(): PassSample {
+    return {
+      leaderPosition: this.rocket.position,
+      followPosition: this.partner.position,
+      leaderVelocity: this.rocket.velocity,
+      followVelocity: this.partner.velocity,
+      leaderFacing: this.leaderFacing,
+      followFacing: this.partnerFacing,
+    };
   }
 
   private handleCollision(): void {
@@ -303,6 +362,23 @@ export class GameScene extends Phaser.Scene {
     this.drawHitFlash(g);
     this.drawBeatClock(g);
     this.drawHearts(g);
+    this.drawPassDebug();
+  }
+
+  private drawPassDebug(): void {
+    const debug = this.passDebug;
+    this.scoreText.setText(`SCORE ${debug.score}`).setAlpha(this.gameOver ? 0.45 : 1);
+    this.passDebugText
+      .setText([
+        `${debug.phase} | ${debug.lastResult}`,
+        `distance ${debug.distance.toFixed(1)}  closest ${debug.closestDistance.toFixed(1)}`,
+        `radial ${debug.radialSpeed.toFixed(1)}  outward ${debug.outwardDuration.toFixed(2)}s`,
+        `crossover ${toDegrees(debug.bearingChange).toFixed(0)}° / ${tuning.passMinimumBearingDegrees}°`,
+        `pivot L ${toDegrees(debug.leaderTurn).toFixed(0)}°  F ${toDegrees(debug.followTurn).toFixed(0)}°`,
+        `speed L ${debug.leaderSpeed.toFixed(0)}  F ${debug.followSpeed.toFixed(0)}`,
+      ])
+      .setColor(debug.lastResult === 'GOOD PASS +1' ? '#8ce7b0' : '#91a8c9')
+      .setAlpha(this.gameOver ? 0.35 : 0.82);
   }
 
   private drawBeatClock(g: Phaser.GameObjects.Graphics): void {

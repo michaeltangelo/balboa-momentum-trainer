@@ -5,6 +5,18 @@ export interface Tuning {
   collisionHeartLossDuration: number;
   collisionRecoverySeparation: number;
   collisionKnockbackSpeed: number;
+  passEntryDistance: number;
+  passMaximumClosestDistance: number;
+  passMinimumBearingDegrees: number;
+  passMinimumLeaderTurnDegrees: number;
+  passMinimumFollowTurnDegrees: number;
+  passMinimumBodySpeed: number;
+  passMinimumClosingSpeed: number;
+  passMinimumOutgoingSpeed: number;
+  passMinimumOutgoingDuration: number;
+  passMinimumOutwardTravel: number;
+  passCandidateTimeout: number;
+  passRearmDistance: number;
   thrust: number;
   rocketMass: number;
   partnerMass: number;
@@ -34,6 +46,18 @@ export const tuning: Tuning = {
   collisionHeartLossDuration: 0.65,
   collisionRecoverySeparation: 88,
   collisionKnockbackSpeed: 90,
+  passEntryDistance: 115,
+  passMaximumClosestDistance: 65,
+  passMinimumBearingDegrees: 100,
+  passMinimumLeaderTurnDegrees: 15,
+  passMinimumFollowTurnDegrees: 50,
+  passMinimumBodySpeed: 18,
+  passMinimumClosingSpeed: 12,
+  passMinimumOutgoingSpeed: 18,
+  passMinimumOutgoingDuration: 0.18,
+  passMinimumOutwardTravel: 18,
+  passCandidateTimeout: 1.8,
+  passRearmDistance: 105,
   thrust: 1185.6,
   rocketMass: 1.2,
   partnerMass: 1,
