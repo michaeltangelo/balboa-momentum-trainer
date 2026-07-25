@@ -17,6 +17,41 @@ const controls: Array<{
   step: number;
 }> = [
   { key: 'thrust', label: 'Thrust', min: 100, max: 3000, step: 10 },
+  {
+    key: 'collisionInvulnerabilityDuration',
+    label: 'Hit immunity',
+    min: 0.1,
+    max: 3,
+    step: 0.05,
+  },
+  {
+    key: 'collisionFlashDuration',
+    label: 'Hit flash',
+    min: 0.05,
+    max: 1,
+    step: 0.05,
+  },
+  {
+    key: 'collisionHeartLossDuration',
+    label: 'Heart loss',
+    min: 0.1,
+    max: 2,
+    step: 0.05,
+  },
+  {
+    key: 'collisionRecoverySeparation',
+    label: 'Hit separation',
+    min: 40,
+    max: 160,
+    step: 1,
+  },
+  {
+    key: 'collisionKnockbackSpeed',
+    label: 'Hit knockback',
+    min: 0,
+    max: 240,
+    step: 5,
+  },
   { key: 'rocketMass', label: 'Leader mass', min: 0.5, max: 5, step: 0.1 },
   { key: 'partnerMass', label: 'Follow mass', min: 1, max: 12, step: 0.1 },
   { key: 'torsoWidth', label: 'Torso width', min: 24, max: 80, step: 1 },

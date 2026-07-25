@@ -4,7 +4,7 @@ A lightweight, mobile-first browser physics toy inspired by Balboa partner-dance
 
 ## Current MVP
 
-The single-screen prototype includes a fixed portrait arena, inertial leader and follow bodies, a slack-and-tension elastic connection, boundary response, collision/result state, one-finger target-seeking controls, mouse and keyboard support, a four-count BPM clock, visibility pause/resume, and a development tuning panel. Both dancers use lightweight, code-drawn top-down torso capsules with collision geometry matching their visuals.
+The single-screen prototype includes a fixed portrait arena, inertial leader and follow bodies, a slack-and-tension elastic connection, boundary response, a three-heart collision system, one-finger target-seeking controls, mouse and keyboard support, a four-count BPM clock, visibility pause/resume, and a development tuning panel. Both dancers use lightweight, code-drawn top-down torso capsules with collision geometry matching their visuals.
 
 ## Stack
 
@@ -27,7 +27,7 @@ Open the URL printed by Vite. Add `?debug=1` (for example, `http://localhost:517
 - Use the BPM slider at the top of the screen to adjust the four-count rhythm from 60 to 240 BPM. Counts 1–2 cue outward movement, count 3 cues inward movement, and count 4 cues the inward pivot.
 - WASD or arrow keys apply full thrust on desktop.
 - Press `R` to restart.
-- After a collision, tap or click anywhere to restart.
+- Colliding with the follow removes one heart, flashes the arena red, and separates the dancers so play can continue. After all three hearts are lost, tap or click anywhere to restart.
 
 ## Scripts
 
@@ -49,3 +49,5 @@ Physics constants live in `src/game/config/tuning.ts`. Gameplay motion remains a
 Both dancers are 50 × 16 px torso capsules. The narrow front-to-back depth allows close in-and-out passes while the rounded shoulder ends avoid corner catches. The follow always faces the leader. The leader smoothly blends its facing between the follow and its travel axis: travel begins influencing orientation above 20 px/s, reaches its full 30% weight at 160 px/s, and uses whichever end of the travel axis is closer to facing the follow to avoid backward-motion flips. This places the leader halfway between the original follow-facing behavior and the initial 60% travel-oriented hybrid. Rotation remains capped at 4 radians per second, giving orientation continuity without adding another control gesture. Visuals and collision use the same capsule geometry. These defaults reflect iterative playtesting; document the reason when changing them.
 
 The rhythm clock defaults to 120 BPM and runs as a repeating four-count cycle. It restarts on count 1 when gameplay restarts, preserves its current beat phase when the BPM slider changes, and pauses while gameplay is stopped. The clock currently provides timing cues only; movement-phase detection and scoring are intentionally deferred to the next iterations.
+
+The player starts with three hearts. A collision removes one heart, shows a 0.35-second red flash and 0.65-second heart-loss animation, separates the dancers to 88 px, and sends them apart at 90 px/s. Surviving collisions grant 0.9 seconds of temporary immunity so a single overlap cannot consume multiple hearts. Losing the third heart ends the run with the message “GG, you killed your follow. Try again.” These recovery values are exposed in the debug panel and do not change ordinary tether behavior.

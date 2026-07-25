@@ -1,6 +1,12 @@
 import Phaser from 'phaser';
 import { WORLD_HEIGHT, WORLD_WIDTH, tuning } from '../config/tuning';
 import type { DebugStats } from '../debug/debugPanel';
+import {
+  advanceHeartSystem,
+  applyHeartHit,
+  createHeartSystemState,
+  type HeartSystemState,
+} from '../health/heartSystem';
 import { calculateTargetThrust } from '../input/targetInput';
 import {
   applyConnectionForces,
@@ -28,7 +34,8 @@ export class GameScene extends Phaser.Scene {
   private pointerActive = false;
   private pointerCurrent: Vec2 = { x: 0, y: 0 };
   private accumulator = 0;
-  private collided = false;
+  private gameOver = false;
+  private hearts: HeartSystemState = createHeartSystemState(3);
   private leaderFacing = -Math.PI / 2;
   private partnerFacing = Math.PI / 2;
   private lastConnection!: ConnectionResult;
@@ -88,7 +95,8 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, deltaMs: number): void {
     this.averagedFrameMs += (deltaMs - this.averagedFrameMs) * 0.08;
     this.beatClock.setBpm(tuning.rhythmBpm);
-    if (!this.collided) {
+    this.hearts = advanceHeartSystem(this.hearts, Math.min(deltaMs / 1000, 0.1));
+    if (!this.gameOver) {
       this.beatClock.advance(deltaMs / 1000);
       this.accumulator += Math.min(deltaMs / 1000, 0.1);
       let steps = 0;
@@ -115,7 +123,8 @@ export class GameScene extends Phaser.Scene {
     this.partner = createBody(WORLD_WIDTH / 2, 370.25, tuning.partnerMass, boundsRadius);
     this.leaderFacing = -Math.PI / 2;
     this.partnerFacing = Math.PI / 2;
-    this.collided = false;
+    this.gameOver = false;
+    this.hearts = createHeartSystemState(3);
     this.pointerActive = false;
     this.accumulator = 0;
     this.beatClock.reset();
@@ -168,10 +177,58 @@ export class GameScene extends Phaser.Scene {
         ),
       )
     ) {
-      this.collided = true;
-      this.pointerActive = false;
-      this.resultText.setText('PATH CROSSED\n\nTap anywhere to try again');
+      this.handleCollision();
     }
+  }
+
+  private handleCollision(): void {
+    const hit = applyHeartHit(this.hearts, {
+      invulnerabilityDuration: tuning.collisionInvulnerabilityDuration,
+      flashDuration: tuning.collisionFlashDuration,
+      heartLossDuration: tuning.collisionHeartLossDuration,
+    });
+    if (!hit.damaged) return;
+
+    this.hearts = hit.state;
+    this.pointerActive = false;
+    if (hit.gameOver) {
+      this.gameOver = true;
+      this.resultText.setText('GG, you killed your follow.\n\nTry again');
+      return;
+    }
+    this.recoverFromCollision();
+  }
+
+  private recoverFromCollision(): void {
+    const dx = this.partner.position.x - this.rocket.position.x;
+    const dy = this.partner.position.y - this.rocket.position.y;
+    const distance = Math.hypot(dx, dy);
+    const direction =
+      distance > Number.EPSILON ? { x: dx / distance, y: dy / distance } : { x: 0, y: -1 };
+    const midpoint = {
+      x: (this.rocket.position.x + this.partner.position.x) / 2,
+      y: (this.rocket.position.y + this.partner.position.y) / 2,
+    };
+    const halfSeparation = tuning.collisionRecoverySeparation / 2;
+    this.rocket.position = {
+      x: midpoint.x - direction.x * halfSeparation,
+      y: midpoint.y - direction.y * halfSeparation,
+    };
+    this.partner.position = {
+      x: midpoint.x + direction.x * halfSeparation,
+      y: midpoint.y + direction.y * halfSeparation,
+    };
+    this.rocket.velocity = {
+      x: -direction.x * tuning.collisionKnockbackSpeed,
+      y: -direction.y * tuning.collisionKnockbackSpeed,
+    };
+    this.partner.velocity = {
+      x: direction.x * tuning.collisionKnockbackSpeed,
+      y: direction.y * tuning.collisionKnockbackSpeed,
+    };
+    containBody(this.rocket, WORLD_WIDTH, WORLD_HEIGHT, ARENA_MARGIN);
+    containBody(this.partner, WORLD_WIDTH, WORLD_HEIGHT, ARENA_MARGIN);
+    this.lastConnection = this.getConnection();
   }
 
   private updateOrientations(dt: number): void {
@@ -211,7 +268,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onPointerDown(pointer: Phaser.Input.Pointer): void {
-    if (this.collided) {
+    if (this.gameOver) {
       this.restart();
       return;
     }
@@ -242,8 +299,10 @@ export class GameScene extends Phaser.Scene {
     this.drawBand(g);
     this.drawTorso(g, this.partner, this.partnerFacing, 0x6c91bd, 0xd6e8ff, 0xbcd7ef);
     this.drawTorso(g, this.rocket, this.leaderFacing, 0xeef5ff, 0x6ea9e8, 0xf1b36a);
-    if (this.pointerActive && !this.collided) this.drawInput(g);
+    if (this.pointerActive && !this.gameOver) this.drawInput(g);
+    this.drawHitFlash(g);
     this.drawBeatClock(g);
+    this.drawHearts(g);
   }
 
   private drawBeatClock(g: Phaser.GameObjects.Graphics): void {
@@ -255,7 +314,7 @@ export class GameScene extends Phaser.Scene {
       text
         .setColor(active ? '#f4f8ff' : '#7385a6')
         .setScale(active ? 1 + pulse * 0.2 : 1)
-        .setAlpha(this.collided ? 0.35 : active ? 1 : 0.65);
+        .setAlpha(this.gameOver ? 0.35 : active ? 1 : 0.65);
       g.fillStyle(active ? 0x6ea9e8 : 0x283a57, active ? 0.75 : 0.45).fillCircle(
         text.x,
         text.y + 16,
@@ -264,7 +323,64 @@ export class GameScene extends Phaser.Scene {
     }
     this.rhythmPhaseText
       .setText(state.count <= 2 ? 'OUT' : state.count === 3 ? 'IN' : 'IN • PIVOT')
-      .setAlpha(this.collided ? 0.35 : 0.9);
+      .setAlpha(this.gameOver ? 0.35 : 0.9);
+  }
+
+  private drawHitFlash(g: Phaser.GameObjects.Graphics): void {
+    if (this.hearts.flashRemaining <= 0) return;
+    const progress =
+      this.hearts.flashRemaining / Math.max(Number.EPSILON, tuning.collisionFlashDuration);
+    g.fillStyle(0xe34444, 0.1 + progress * 0.24).fillRoundedRect(
+      ARENA_MARGIN,
+      72,
+      WORLD_WIDTH - 32,
+      WORLD_HEIGHT - 96,
+      18,
+    );
+    g.lineStyle(4, 0xff5c5c, 0.35 + progress * 0.55).strokeRoundedRect(
+      ARENA_MARGIN,
+      72,
+      WORLD_WIDTH - 32,
+      WORLD_HEIGHT - 96,
+      18,
+    );
+  }
+
+  private drawHearts(g: Phaser.GameObjects.Graphics): void {
+    for (let index = 0; index < this.hearts.maximumLives; index += 1) {
+      const x = 32 + index * 24;
+      const y = 48;
+      const filled = index < this.hearts.lives;
+      this.drawHeart(g, x, y, 1, filled ? 0xe65362 : 0x26354e, filled ? 1 : 0.7);
+      if (index === this.hearts.lastLostHeartIndex && this.hearts.heartLossRemaining > 0) {
+        const progress =
+          this.hearts.heartLossRemaining /
+          Math.max(Number.EPSILON, tuning.collisionHeartLossDuration);
+        this.drawHeart(g, x, y, 0.7 + progress * 0.45, 0xff5a68, progress);
+      }
+    }
+  }
+
+  private drawHeart(
+    g: Phaser.GameObjects.Graphics,
+    x: number,
+    y: number,
+    scale: number,
+    color: number,
+    alpha: number,
+  ): void {
+    const radius = 4.5 * scale;
+    g.fillStyle(color, alpha)
+      .fillCircle(x - radius * 0.75, y, radius)
+      .fillCircle(x + radius * 0.75, y, radius)
+      .fillTriangle(
+        x - radius * 1.65,
+        y + radius * 0.25,
+        x + radius * 1.65,
+        y + radius * 0.25,
+        x,
+        y + radius * 2.1,
+      );
   }
 
   private drawStars(g: Phaser.GameObjects.Graphics): void {

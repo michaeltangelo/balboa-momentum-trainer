@@ -1,5 +1,10 @@
 export interface Tuning {
   rhythmBpm: number;
+  collisionInvulnerabilityDuration: number;
+  collisionFlashDuration: number;
+  collisionHeartLossDuration: number;
+  collisionRecoverySeparation: number;
+  collisionKnockbackSpeed: number;
   thrust: number;
   rocketMass: number;
   partnerMass: number;
@@ -24,6 +29,11 @@ export interface Tuning {
 
 export const tuning: Tuning = {
   rhythmBpm: 120,
+  collisionInvulnerabilityDuration: 0.9,
+  collisionFlashDuration: 0.35,
+  collisionHeartLossDuration: 0.65,
+  collisionRecoverySeparation: 88,
+  collisionKnockbackSpeed: 90,
   thrust: 1185.6,
   rocketMass: 1.2,
   partnerMass: 1,
