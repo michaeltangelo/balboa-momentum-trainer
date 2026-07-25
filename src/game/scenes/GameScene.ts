@@ -45,6 +45,20 @@ const getPassSettings = (): PassDetectorSettings => ({
   rearmDistance: tuning.passRearmDistance,
 });
 
+interface ScoreParticle {
+  start: Vec2;
+  direction: Vec2;
+  speed: number;
+  color: number;
+}
+
+interface ScoreCelebration {
+  elapsed: number;
+  duration: number;
+  origin: Vec2;
+  particles: ScoreParticle[];
+}
+
 export class GameScene extends Phaser.Scene {
   private rocket!: Body;
   private partner!: Body;
@@ -53,6 +67,7 @@ export class GameScene extends Phaser.Scene {
   private rhythmPhaseText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
   private passDebugText!: Phaser.GameObjects.Text;
+  private scoreCelebrationText!: Phaser.GameObjects.Text;
   private resultText!: Phaser.GameObjects.Text;
   private cursorKeys!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Record<'W' | 'A' | 'S' | 'D' | 'R', Phaser.Input.Keyboard.Key>;
@@ -68,6 +83,7 @@ export class GameScene extends Phaser.Scene {
   private readonly beatClock = new BeatClock(tuning.rhythmBpm);
   private readonly passDetector = new PassDetector(getPassSettings());
   private passDebug: PassDebugState = this.passDetector.getState();
+  private scoreCelebration?: ScoreCelebration;
   private readonly reportStats?: (stats: DebugStats) => void;
 
   constructor(reportStats?: (stats: DebugStats) => void) {
@@ -108,6 +124,18 @@ export class GameScene extends Phaser.Scene {
       color: '#91a8c9',
       lineSpacing: 3,
     });
+    this.scoreCelebrationText = this.add
+      .text(0, 0, 'GOOD PASS +1', {
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: '16px',
+        fontStyle: 'bold',
+        color: '#a8f0c3',
+        stroke: '#071020',
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5)
+      .setDepth(3)
+      .setVisible(false);
     this.resultText = this.add
       .text(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, '', {
         align: 'center',
@@ -137,6 +165,7 @@ export class GameScene extends Phaser.Scene {
     this.averagedFrameMs += (deltaMs - this.averagedFrameMs) * 0.08;
     this.beatClock.setBpm(tuning.rhythmBpm);
     this.hearts = advanceHeartSystem(this.hearts, Math.min(deltaMs / 1000, 0.1));
+    this.advanceScoreCelebration(Math.min(deltaMs / 1000, 0.1));
     if (!this.gameOver) {
       this.beatClock.advance(deltaMs / 1000);
       this.accumulator += Math.min(deltaMs / 1000, 0.1);
@@ -172,6 +201,8 @@ export class GameScene extends Phaser.Scene {
     this.passDetector.setSettings(getPassSettings());
     this.passDetector.reset();
     this.passDebug = this.passDetector.getState();
+    this.scoreCelebration = undefined;
+    this.scoreCelebrationText?.setVisible(false);
     this.resultText?.setText('');
     this.lastConnection = this.getConnection();
   };
@@ -226,7 +257,9 @@ export class GameScene extends Phaser.Scene {
       this.passDebug = this.passDetector.update(this.getPassSample(), 0).debug;
       return;
     }
-    this.passDebug = this.passDetector.update(this.getPassSample(), dt).debug;
+    const passUpdate = this.passDetector.update(this.getPassSample(), dt);
+    this.passDebug = passUpdate.debug;
+    if (passUpdate.scored) this.startScoreCelebration();
   }
 
   private getPassSample(): PassSample {
@@ -238,6 +271,51 @@ export class GameScene extends Phaser.Scene {
       leaderFacing: this.leaderFacing,
       followFacing: this.partnerFacing,
     };
+  }
+
+  private startScoreCelebration(): void {
+    const origin = {
+      x: (this.rocket.position.x + this.partner.position.x) / 2,
+      y: (this.rocket.position.y + this.partner.position.y) / 2,
+    };
+    const particles: ScoreParticle[] = [];
+    const dancers = [this.rocket, this.partner];
+    const speeds = [38, 54, 70];
+    const angleOffsets = [-0.22, 0, 0.22];
+
+    for (const [dancerIndex, dancer] of dancers.entries()) {
+      const bodySpeed = Math.hypot(dancer.velocity.x, dancer.velocity.y);
+      const baseDirection =
+        bodySpeed > Number.EPSILON
+          ? { x: dancer.velocity.x / bodySpeed, y: dancer.velocity.y / bodySpeed }
+          : { x: dancerIndex === 0 ? -1 : 1, y: 0 };
+      const baseAngle = Math.atan2(baseDirection.y, baseDirection.x);
+      for (let index = 0; index < angleOffsets.length; index += 1) {
+        const angle = baseAngle + angleOffsets[index];
+        particles.push({
+          start: { ...dancer.position },
+          direction: { x: Math.cos(angle), y: Math.sin(angle) },
+          speed: speeds[index],
+          color: index === 1 ? 0xf4cf72 : 0x8ce7b0,
+        });
+      }
+    }
+
+    this.scoreCelebration = {
+      elapsed: 0,
+      duration: 0.68,
+      origin,
+      particles,
+    };
+  }
+
+  private advanceScoreCelebration(dt: number): void {
+    if (!this.scoreCelebration) return;
+    this.scoreCelebration.elapsed += Math.max(0, dt);
+    if (this.scoreCelebration.elapsed >= this.scoreCelebration.duration) {
+      this.scoreCelebration = undefined;
+      this.scoreCelebrationText?.setVisible(false);
+    }
   }
 
   private handleCollision(): void {
@@ -359,6 +437,7 @@ export class GameScene extends Phaser.Scene {
     this.drawTorso(g, this.partner, this.partnerFacing, 0x6c91bd, 0xd6e8ff, 0xbcd7ef);
     this.drawTorso(g, this.rocket, this.leaderFacing, 0xeef5ff, 0x6ea9e8, 0xf1b36a);
     if (this.pointerActive && !this.gameOver) this.drawInput(g);
+    this.drawScoreCelebration(g);
     this.drawHitFlash(g);
     this.drawBeatClock(g);
     this.drawHearts(g);
@@ -367,7 +446,20 @@ export class GameScene extends Phaser.Scene {
 
   private drawPassDebug(): void {
     const debug = this.passDebug;
-    this.scoreText.setText(`SCORE ${debug.score}`).setAlpha(this.gameOver ? 0.45 : 1);
+    const celebrationProgress = this.scoreCelebration
+      ? this.scoreCelebration.elapsed / this.scoreCelebration.duration
+      : 1;
+    const scoreBump =
+      celebrationProgress < 1
+        ? 1 +
+          Math.sin(Math.PI * Math.min(1, celebrationProgress / 0.45)) *
+            (1 - celebrationProgress) *
+            0.32
+        : 1;
+    this.scoreText
+      .setText(`SCORE ${debug.score}`)
+      .setScale(scoreBump)
+      .setAlpha(this.gameOver ? 0.45 : 1);
     this.passDebugText
       .setText([
         `${debug.phase} | ${debug.lastResult}`,
@@ -379,6 +471,41 @@ export class GameScene extends Phaser.Scene {
       ])
       .setColor(debug.lastResult === 'GOOD PASS +1' ? '#8ce7b0' : '#91a8c9')
       .setAlpha(this.gameOver ? 0.35 : 0.82);
+  }
+
+  private drawScoreCelebration(g: Phaser.GameObjects.Graphics): void {
+    const celebration = this.scoreCelebration;
+    if (!celebration) {
+      this.scoreCelebrationText.setVisible(false);
+      return;
+    }
+
+    const progress = Math.min(1, celebration.elapsed / celebration.duration);
+    const remaining = 1 - progress;
+    const pulse = Math.sin(Math.PI * progress);
+    const easedProgress = 1 - remaining * remaining;
+
+    g.lineStyle(2 + pulse * 2, 0x8ce7b0, remaining * 0.5).strokeRoundedRect(
+      ARENA_MARGIN,
+      72,
+      WORLD_WIDTH - 32,
+      WORLD_HEIGHT - 96,
+      18,
+    );
+
+    for (const particle of celebration.particles) {
+      const travel = particle.speed * celebration.elapsed;
+      const x = particle.start.x + particle.direction.x * travel;
+      const y = particle.start.y + particle.direction.y * travel;
+      g.fillStyle(particle.color, remaining * 0.9).fillCircle(x, y, 0.8 + remaining * 1.8);
+    }
+
+    const textAlpha = progress < 0.72 ? 1 : remaining / 0.28;
+    this.scoreCelebrationText
+      .setPosition(celebration.origin.x, celebration.origin.y - 18 - easedProgress * 28)
+      .setScale(0.9 + pulse * 0.15)
+      .setAlpha(Math.max(0, Math.min(1, textAlpha)))
+      .setVisible(true);
   }
 
   private drawBeatClock(g: Phaser.GameObjects.Graphics): void {
