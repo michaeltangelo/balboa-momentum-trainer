@@ -1,5 +1,4 @@
 export interface Tuning {
-  rhythmBpm: number;
   collisionInvulnerabilityDuration: number;
   collisionFlashDuration: number;
   collisionHeartLossDuration: number;
@@ -40,7 +39,6 @@ export interface Tuning {
 }
 
 export const tuning: Tuning = {
-  rhythmBpm: 120,
   collisionInvulnerabilityDuration: 0.9,
   collisionFlashDuration: 0.35,
   collisionHeartLossDuration: 0.65,

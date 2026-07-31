@@ -4,7 +4,7 @@ A lightweight, mobile-first browser physics toy inspired by Balboa partner-dance
 
 ## Current MVP
 
-The single-screen prototype includes a fixed portrait arena, inertial leader and follow bodies, a slack-and-tension elastic connection, boundary response, a three-heart collision system, a good-pass score detector, one-finger target-seeking controls, mouse and keyboard support, a four-count BPM clock, visibility pause/resume, and a development tuning panel. Both dancers use lightweight, code-drawn top-down torso capsules with collision geometry matching their visuals.
+The single-screen prototype includes a fixed portrait arena, inertial leader and follow bodies, a slack-and-tension elastic connection, boundary response, a three-heart collision system, a good-pass score detector, one-finger target-seeking controls, mouse and keyboard support, visibility pause/resume, and a development tuning panel. Both dancers use lightweight, code-drawn top-down torso capsules with collision geometry matching their visuals.
 
 ## Stack
 
@@ -24,7 +24,6 @@ Open the URL printed by Vite. Add `?debug=1` (for example, `http://localhost:517
 ## Controls
 
 - Touch or click and hold anywhere in the arena to guide the leader toward that point. Move your finger to update the target; the leader slows as it arrives. Release to coast.
-- Use the BPM slider at the top of the screen to adjust the four-count rhythm from 60 to 240 BPM. Counts 1–2 cue outward movement, count 3 cues inward movement, and count 4 cues the inward pivot.
 - WASD or arrow keys apply full thrust on desktop.
 - Press `R` to restart.
 - Colliding with the follow removes one heart, flashes the arena red, and separates the dancers so play can continue. After all three hearts are lost, tap or click anywhere to restart.
@@ -47,8 +46,6 @@ This version intentionally excludes tutorials, formal drills or levels, workshop
 Physics constants live in `src/game/config/tuning.ts`. Gameplay motion remains at the iteratively tested 1.3× profile inside the unchanged 390 × 780 arena. The tether begins tension at 75.4 px, remains elastic until 153.4 px, and then ramps sharply through quadratic overstretch. Its 78 px healthy extension, 1.8 base stiffness, and 2.4 damping preserve the prior proportional spring behavior; the overstretch factor is approximately 0.02959 so the larger extension does not alter the nonlinear multiplier. Target steering begins slowing at 143 px, uses an 84.5 px/s velocity response, and targets 325 px/s. The leader uses mass 1.2 and thrust 1185.6, while the follow mass is 1, making the player 20% heavier and scaling acceleration to traverse the larger distances in the same time. Mass ratio controls how tether force is distributed; stiffness and damping control the follow's character.
 
 Both dancers are 50 × 16 px torso capsules. The narrow front-to-back depth allows close in-and-out passes while the rounded shoulder ends avoid corner catches. The follow always faces the leader. The leader smoothly blends its facing between the follow and its travel axis: travel begins influencing orientation above 20 px/s, reaches its full 30% weight at 160 px/s, and uses whichever end of the travel axis is closer to facing the follow to avoid backward-motion flips. This places the leader halfway between the original follow-facing behavior and the initial 60% travel-oriented hybrid. Rotation remains capped at 4 radians per second, giving orientation continuity without adding another control gesture. Visuals and collision use the same capsule geometry. These defaults reflect iterative playtesting; document the reason when changing them.
-
-The rhythm clock defaults to 120 BPM and runs as a repeating four-count cycle. It restarts on count 1 when gameplay restarts, preserves its current beat phase when the BPM slider changes, and pauses while gameplay is stopped. Pass scoring is based on physical movement rather than prescribed beat timing.
 
 The player starts with three hearts. A collision removes one heart, shows a 0.35-second red flash and 0.65-second heart-loss animation, separates the dancers to 88 px, and sends them apart at 90 px/s. Surviving collisions grant 0.9 seconds of temporary immunity so a single overlap cannot consume multiple hearts. Losing the third heart ends the run with the message “GG, you killed your follow. Try again.” These recovery values are exposed in the debug panel and do not change ordinary tether behavior.
 

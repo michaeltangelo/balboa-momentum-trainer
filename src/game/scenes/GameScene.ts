@@ -17,7 +17,6 @@ import { capsulesCollide, createTorsoCapsule } from '../physics/capsule';
 import { calculateBlendedLeaderFacing, rotateTowards } from '../physics/orientation';
 import { addForce, containBody, integrate, speed } from '../physics/simulation';
 import { createBody, type Body, type Vec2 } from '../physics/types';
-import { BeatClock } from '../rhythm/beatClock';
 import {
   PassDetector,
   type PassDebugState,
@@ -63,8 +62,6 @@ export class GameScene extends Phaser.Scene {
   private rocket!: Body;
   private partner!: Body;
   private graphics!: Phaser.GameObjects.Graphics;
-  private beatTexts: Phaser.GameObjects.Text[] = [];
-  private rhythmPhaseText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
   private passDebugText!: Phaser.GameObjects.Text;
   private scoreCelebrationText!: Phaser.GameObjects.Text;
@@ -80,7 +77,6 @@ export class GameScene extends Phaser.Scene {
   private partnerFacing = Math.PI / 2;
   private lastConnection!: ConnectionResult;
   private averagedFrameMs = 16.7;
-  private readonly beatClock = new BeatClock(tuning.rhythmBpm);
   private readonly passDetector = new PassDetector(getPassSettings());
   private passDebug: PassDebugState = this.passDetector.getState();
   private scoreCelebration?: ScoreCelebration;
@@ -93,23 +89,6 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.graphics = this.add.graphics();
-    this.beatTexts = [1, 2, 3, 4].map((count, index) =>
-      this.add
-        .text(150 + index * 30, 50, String(count), {
-          fontFamily: 'system-ui, sans-serif',
-          fontSize: '14px',
-          color: '#7385a6',
-        })
-        .setOrigin(0.5),
-    );
-    this.rhythmPhaseText = this.add
-      .text(WORLD_WIDTH / 2, 92, 'OUT', {
-        fontFamily: 'system-ui, sans-serif',
-        fontSize: '11px',
-        color: '#a9bddc',
-        letterSpacing: 1,
-      })
-      .setOrigin(0.5);
     this.scoreText = this.add
       .text(WORLD_WIDTH - 24, 48, 'SCORE 0', {
         fontFamily: 'system-ui, sans-serif',
@@ -163,11 +142,9 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, deltaMs: number): void {
     this.averagedFrameMs += (deltaMs - this.averagedFrameMs) * 0.08;
-    this.beatClock.setBpm(tuning.rhythmBpm);
     this.hearts = advanceHeartSystem(this.hearts, Math.min(deltaMs / 1000, 0.1));
     this.advanceScoreCelebration(Math.min(deltaMs / 1000, 0.1));
     if (!this.gameOver) {
-      this.beatClock.advance(deltaMs / 1000);
       this.accumulator += Math.min(deltaMs / 1000, 0.1);
       let steps = 0;
       while (this.accumulator >= STEP && steps < 6) {
@@ -197,7 +174,6 @@ export class GameScene extends Phaser.Scene {
     this.hearts = createHeartSystemState(3);
     this.pointerActive = false;
     this.accumulator = 0;
-    this.beatClock.reset();
     this.passDetector.setSettings(getPassSettings());
     this.passDetector.reset();
     this.passDebug = this.passDetector.getState();
@@ -439,7 +415,6 @@ export class GameScene extends Phaser.Scene {
     if (this.pointerActive && !this.gameOver) this.drawInput(g);
     this.drawScoreCelebration(g);
     this.drawHitFlash(g);
-    this.drawBeatClock(g);
     this.drawHearts(g);
     this.drawPassDebug();
   }
@@ -506,27 +481,6 @@ export class GameScene extends Phaser.Scene {
       .setScale(0.9 + pulse * 0.15)
       .setAlpha(Math.max(0, Math.min(1, textAlpha)))
       .setVisible(true);
-  }
-
-  private drawBeatClock(g: Phaser.GameObjects.Graphics): void {
-    const state = this.beatClock.getState();
-    const activeIndex = state.count - 1;
-    const pulse = 1 - state.beatProgress;
-    for (const [index, text] of this.beatTexts.entries()) {
-      const active = index === activeIndex;
-      text
-        .setColor(active ? '#f4f8ff' : '#7385a6')
-        .setScale(active ? 1 + pulse * 0.2 : 1)
-        .setAlpha(this.gameOver ? 0.35 : active ? 1 : 0.65);
-      g.fillStyle(active ? 0x6ea9e8 : 0x283a57, active ? 0.75 : 0.45).fillCircle(
-        text.x,
-        text.y + 16,
-        active ? 3.5 + pulse * 1.5 : 3,
-      );
-    }
-    this.rhythmPhaseText
-      .setText(state.count <= 2 ? 'OUT' : state.count === 3 ? 'IN' : 'IN • PIVOT')
-      .setAlpha(this.gameOver ? 0.35 : 0.9);
   }
 
   private drawHitFlash(g: Phaser.GameObjects.Graphics): void {

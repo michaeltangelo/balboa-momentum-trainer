@@ -50,37 +50,6 @@ canvas {
   outline: none;
 }
 
-.rhythm-control {
-  position: fixed;
-  z-index: 9;
-  top: max(6px, env(safe-area-inset-top));
-  left: 50%;
-  display: grid;
-  grid-template-columns: 66px 132px;
-  align-items: center;
-  gap: 8px;
-  width: 222px;
-  padding: 5px 8px;
-  border: 1px solid #6f86aa55;
-  border-radius: 999px;
-  background: #071021d9;
-  color: #dce9ff;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  transform: translateX(-50%);
-  touch-action: manipulation;
-}
-
-.rhythm-control output {
-  text-align: right;
-}
-
-.rhythm-control input {
-  width: 132px;
-  accent-color: #6ea9e8;
-  touch-action: pan-x;
-}
-
 .debug-panel {
   position: fixed;
   z-index: 10;

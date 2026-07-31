@@ -1,14 +1,11 @@
 import Phaser from 'phaser';
 import { WORLD_HEIGHT, WORLD_WIDTH, tuning } from './game/config/tuning';
 import { createDebugPanel } from './game/debug/debugPanel';
-import { createRhythmControl } from './game/rhythm/rhythmControl';
 import { GameScene } from './game/scenes/GameScene';
 import './styles/main.css';
 
 const debugEnabled = new URLSearchParams(window.location.search).get('debug') === '1';
 const updateDebug = debugEnabled ? createDebugPanel(tuning) : undefined;
-createRhythmControl(tuning);
-
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'app',
